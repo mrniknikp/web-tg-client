@@ -273,7 +273,7 @@
                 
                 <div class="info-section">
                     <h4>Прокси настройки</h4>
-                    <div class="proxy-details">
+                    <div class="proxy-details" id="proxyDetails">
                         <div class="proxy-row">
                             <span>Хост:</span>
                             <code>{{ proxy_host }}</code>
@@ -289,6 +289,18 @@
                         <div class="proxy-row">
                             <span>Тип:</span>
                             <code>MTProto</code>
+                        </div>
+                    </div>
+                    <div style="margin-top: 12px;">
+                        <h5 style="color: #fff; margin-bottom: 8px; font-size: 13px;">Все доступные прокси ({{ all_proxies|length }}):</h5>
+                        <div class="proxy-list" id="allProxiesList">
+                            {% for p in all_proxies %}
+                            <div class="proxy-item {% if loop.index0 == 0 %}active{% endif %}" data-index="{{ loop.index0 }}">
+                                <span class="proxy-host">{{ p[0] }}:{{ p[1] }}</span>
+                                <span class="proxy-secret">{{ p[2][:8] }}...{{ p[2][-8:] }}</span>
+                                <span class="proxy-status-dot"></span>
+                            </div>
+                            {% endfor %}
                         </div>
                     </div>
                 </div>
