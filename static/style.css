@@ -371,6 +371,62 @@ body {
     background: #3d4c5d;
 }
 
+/* Список прокси */
+.proxy-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.proxy-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background-color: #1b2838;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+}
+
+.proxy-item:hover {
+    background-color: #242f3d;
+}
+
+.proxy-item.active {
+    background-color: #2b5278;
+    border-color: #2AABEE;
+}
+
+.proxy-item.working .proxy-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #4caf50;
+    box-shadow: 0 0 6px rgba(76, 175, 80, 0.6);
+}
+
+.proxy-item.not-working .proxy-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #f44336;
+}
+
+.proxy-host {
+    color: #fff;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+}
+
+.proxy-secret {
+    color: #8899a6;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+}
+
 /* Адаптивность */
 @media (max-width: 1200px) {
     .app-container {

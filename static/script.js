@@ -1,6 +1,7 @@
 // Проверка статуса прокси при загрузке страницы
 document.addEventListener('DOMContentLoaded', function() {
     checkProxyStatus();
+    updateAllProxiesList();
     setInterval(checkProxyStatus, 30000); // Проверка каждые 30 секунд
 });
 
@@ -11,10 +12,37 @@ async function checkProxyStatus() {
         const data = await response.json();
         
         updateProxyStatus(data.connected);
+        updateAllProxiesList(data);
     } catch (error) {
         console.error('Ошибка проверки статуса прокси:', error);
         updateProxyStatus(false);
     }
+}
+
+// Обновление списка всех прокси
+function updateAllProxiesList(data = null) {
+    if (!data || !data.all_proxies) return;
+    
+    const proxyList = document.getElementById('allProxiesList');
+    if (!proxyList) return;
+    
+    data.all_proxies.forEach(proxy => {
+        const item = proxyList.querySelector(`.proxy-item[data-index="${proxy.index}"]`);
+        if (item) {
+            // Обновляем классы
+            item.classList.remove('working', 'not-working', 'active');
+            
+            if (proxy.is_current) {
+                item.classList.add('active');
+            }
+            
+            if (proxy.working) {
+                item.classList.add('working');
+            } else {
+                item.classList.add('not-working');
+            }
+        }
+    });
 }
 
 // Обновление отображения статуса прокси
@@ -50,13 +78,16 @@ async function testProxy() {
         if (data.success) {
             alert('✓ Прокси работает корректно!\nОтвет сервера: ' + data.response_length + ' байт');
             updateProxyStatus(true);
+            checkProxyStatus(); // Обновить список прокси
         } else {
             alert('✗ Ошибка подключения к прокси:\n' + data.error);
             updateProxyStatus(false);
+            checkProxyStatus(); // Обновить список прокси
         }
     } catch (error) {
         alert('✗ Ошибка тестирования прокси:\n' + error.message);
         updateProxyStatus(false);
+        checkProxyStatus(); // Обновить список прокси
     } finally {
         btn.disabled = false;
         btn.textContent = 'Тестировать прокси';

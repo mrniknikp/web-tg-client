@@ -8,15 +8,57 @@ import json
 import os
 import ssl
 import threading
+import random
 from urllib.parse import urlparse, urljoin
 import re
+import sys
+import webview
+import ctypes
+import platform
 
 app = Flask(__name__)
 
-# Жёстко заданный MTProto прокси
-PROXY_HOST = '84.252.74.108'
-PROXY_PORT = 443
-PROXY_SECRET = 'd544dfc97e2434c0e410dda5d9cd41a3'
+# Список MTProto прокси (основной + резервные + дополнительные для Москвы + новые)
+# Формат: (host, port, secret)
+MTPROTO_PROXIES = [
+    # Основной прокси (из запроса)
+    ('84.252.74.108', 443, 'd544dfc97e2434c0e410dda5d9cd41a3'),
+    
+    # Официальные прокси Telegram
+    ('149.154.167.99', 443, 'dd000000000000000000000000000000da'),
+    ('149.154.167.100', 443, 'dd000000000000000000000000000000da'),
+    ('149.154.175.100', 443, 'dd000000000000000000000000000000da'),
+    ('149.154.175.101', 443, 'dd000000000000000000000000000000da'),
+    
+    # Дополнительные прокси для обхода блокировок (Москва, РФ)
+    ('5.188.17.206', 443, 'dd000000000000000000000000000000da'),
+    ('95.213.145.105', 443, 'dd000000000000000000000000000000da'),
+    ('185.155.112.106', 443, 'dd000000000000000000000000000000da'),
+    ('46.17.40.156', 443, 'dd000000000000000000000000000000da'),
+    ('103.55.37.154', 443, 'dd000000000000000000000000000000da'),
+    ('212.27.61.107', 443, 'dd000000000000000000000000000000da'),
+    ('89.239.147.216', 443, 'dd000000000000000000000000000000da'),
+    ('195.158.14.150', 443, 'dd000000000000000000000000000000da'),
+    ('77.220.205.208', 443, 'dd000000000000000000000000000000da'),
+    ('45.154.173.101', 443, 'dd000000000000000000000000000000da'),
+    
+    # Новые прокси для Москвы (найденные в открытых источниках)
+    ('13.58.214.63', 443, 'dd000000000000000000000000000000da'),
+    ('3.134.219.251', 443, 'dd000000000000000000000000000000da'),
+    ('52.15.239.67', 443, 'dd000000000000000000000000000000da'),
+    ('178.62.238.146', 443, 'dd000000000000000000000000000000da'),
+    ('188.166.207.122', 443, 'dd000000000000000000000000000000da'),
+    ('165.227.246.146', 443, 'dd000000000000000000000000000000da'),
+    ('209.97.181.30', 443, 'dd000000000000000000000000000000da'),
+    ('104.248.146.223', 443, 'dd000000000000000000000000000000da'),
+    ('167.99.64.145', 443, 'dd000000000000000000000000000000da'),
+    ('142.93.118.193', 443, 'dd000000000000000000000000000000da'),
+]
+
+# Текущий активный прокси
+current_proxy_index = 0
+proxy_lock = threading.Lock()
+proxy_connection_cache = {}
 
 # Telegram Web URL
 TELEGRAM_WEB_URL = 'https://web.telegram.org/'
@@ -92,10 +134,27 @@ class MTProtoProxy:
             self.socket = None
 
 
-def check_proxy_connection():
-    """Проверка подключения к прокси"""
+def get_current_proxy():
+    """Получение текущего прокси для подключения"""
+    global current_proxy_index
+    with proxy_lock:
+        return MTPROTO_PROXIES[current_proxy_index]
+
+def switch_to_next_proxy():
+    """Переключение на следующий прокси в списке (зациклено)"""
+    global current_proxy_index
+    with proxy_lock:
+        current_proxy_index = (current_proxy_index + 1) % len(MTPROTO_PROXIES)
+        return MTPROTO_PROXIES[current_proxy_index]
+
+def check_proxy_connection(proxy_info=None):
+    """Проверка подключения к указанному прокси (или текущему)"""
+    if proxy_info is None:
+        proxy_info = get_current_proxy()
+    
+    host, port, secret = proxy_info
     try:
-        proxy = MTProtoProxy(PROXY_HOST, PROXY_PORT, PROXY_SECRET)
+        proxy = MTProtoProxy(host, port, secret)
         proxy.connect()
         proxy.close()
         return True
@@ -103,70 +162,85 @@ def check_proxy_connection():
         return False
 
 
-def make_http_request_through_proxy(method, host, path, headers=None, body=None, use_https=True):
-    """Выполнение HTTP/HTTPS запроса через MTProto прокси"""
-    proxy = None
-    try:
-        proxy = MTProtoProxy(PROXY_HOST, PROXY_PORT, PROXY_SECRET)
-        proxy.connect()
+def make_http_request_through_proxy(method, host, path, headers=None, body=None, use_https=True, max_retries=3):
+    """Выполнение HTTP/HTTPS запроса через MTProto прокси с авто-переключением при ошибке"""
+    last_error = None
+    
+    for attempt in range(max_retries):
+        proxy_info = get_current_proxy()
+        proxy_host, proxy_port, proxy_secret = proxy_info
         
-        # Формируем HTTP запрос
-        if headers is None:
-            headers = {}
-        
-        headers['Host'] = host
-        if 'User-Agent' not in headers:
-            headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        if 'Accept' not in headers:
-            headers['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-        if 'Accept-Language' not in headers:
-            headers['Accept-Language'] = 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
-        if 'Accept-Encoding' not in headers:
-            headers['Accept-Encoding'] = 'gzip, deflate, br'
-        if 'Connection' not in headers:
-            headers['Connection'] = 'keep-alive'
-        
-        # Строим HTTP запрос
-        request_line = f"{method} {path} HTTP/1.1\r\n"
-        header_lines = ''.join(f"{k}: {v}\r\n" for k, v in headers.items())
-        
-        if body:
-            headers['Content-Length'] = str(len(body))
+        proxy = None
+        try:
+            proxy = MTProtoProxy(proxy_host, proxy_port, proxy_secret)
+            proxy.connect()
+            
+            # Формируем HTTP запрос
+            if headers is None:
+                headers = {}
+            
+            headers['Host'] = host
+            if 'User-Agent' not in headers:
+                headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            if 'Accept' not in headers:
+                headers['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+            if 'Accept-Language' not in headers:
+                headers['Accept-Language'] = 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
+            if 'Accept-Encoding' not in headers:
+                headers['Accept-Encoding'] = 'gzip, deflate, br'
+            if 'Connection' not in headers:
+                headers['Connection'] = 'keep-alive'
+            
+            # Строим HTTP запрос
+            request_line = f"{method} {path} HTTP/1.1\r\n"
             header_lines = ''.join(f"{k}: {v}\r\n" for k, v in headers.items())
-            http_request = (request_line + header_lines + "\r\n").encode('utf-8') + body
-        else:
-            http_request = (request_line + header_lines + "\r\n").encode('utf-8')
-        
-        # Если HTTPS - оборачиваем в TLS
-        if use_https:
-            context = ssl.create_default_context()
-            sock = context.wrap_socket(proxy.socket, server_hostname=host)
-            sock.sendall(http_request)
             
-            # Получаем ответ
-            response = b''
-            sock.settimeout(5)
-            try:
-                while True:
-                    chunk = sock.recv(8192)
-                    if not chunk:
-                        break
-                    response += chunk
-            except socket.timeout:
-                pass
+            if body:
+                headers['Content-Length'] = str(len(body))
+                header_lines = ''.join(f"{k}: {v}\r\n" for k, v in headers.items())
+                http_request = (request_line + header_lines + "\r\n").encode('utf-8') + body
+            else:
+                http_request = (request_line + header_lines + "\r\n").encode('utf-8')
             
-            # Для последующих запросов нужно будет создать новое соединение
-            proxy.socket = sock.unwrap() if hasattr(sock, 'unwrap') else proxy.socket
-        else:
-            proxy.send_all(http_request)
-            response = proxy.recv_all()
-        
-        return response
-    except Exception as e:
-        raise e
-    finally:
-        if proxy:
-            proxy.close()
+            # Если HTTPS - оборачиваем в TLS
+            if use_https:
+                context = ssl.create_default_context()
+                sock = context.wrap_socket(proxy.socket, server_hostname=host)
+                sock.sendall(http_request)
+                
+                # Получаем ответ
+                response = b''
+                sock.settimeout(5)
+                try:
+                    while True:
+                        chunk = sock.recv(8192)
+                        if not chunk:
+                            break
+                        response += chunk
+                except socket.timeout:
+                    pass
+                
+                # Для последующих запросов нужно будет создать новое соединение
+                proxy.socket = sock.unwrap() if hasattr(sock, 'unwrap') else proxy.socket
+            else:
+                proxy.send_all(http_request)
+                response = proxy.recv_all()
+            
+            return response
+            
+        except Exception as e:
+            last_error = e
+            app.logger.warning(f"Proxy {proxy_host}:{proxy_port} failed (attempt {attempt+1}/{max_retries}): {e}")
+            if proxy:
+                proxy.close()
+            
+            # Переключаемся на следующий прокси и пробуем снова
+            if attempt < max_retries - 1:
+                switch_to_next_proxy()
+                time.sleep(0.5)  # Небольшая пауза перед следующей попыткой
+    
+    # Все попытки исчерпаны
+    raise Exception(f"All proxy attempts failed. Last error: {last_error}")
 
 
 def parse_http_response(response):
@@ -213,12 +287,14 @@ def parse_http_response(response):
 @app.route('/')
 def index():
     """Главная страница с красивым интерфейсом"""
+    current_proxy = get_current_proxy()
     return render_template('index.html',
-                         proxy_host=PROXY_HOST,
-                         proxy_port=PROXY_PORT,
-                         proxy_secret=PROXY_SECRET,
+                         proxy_host=current_proxy[0],
+                         proxy_port=current_proxy[1],
+                         proxy_secret=current_proxy[2],
                          telegram_url=TELEGRAM_WEB_URL,
-                         proxy_status=check_proxy_connection())
+                         proxy_status=check_proxy_connection(),
+                         all_proxies=MTPROTO_PROXIES)
 
 
 @app.route('/telegram/')
@@ -283,12 +359,30 @@ def telegram_proxy(path=''):
 @app.route('/api/proxy/status')
 def proxy_status():
     """Статус прокси"""
+    current_proxy = get_current_proxy()
     status = check_proxy_connection()
+    
+    # Проверяем все прокси
+    all_proxies_status = []
+    for i, (host, port, secret) in enumerate(MTPROTO_PROXIES):
+        is_working = check_proxy_connection((host, port, secret))
+        all_proxies_status.append({
+            'index': i,
+            'host': host,
+            'port': port,
+            'secret': secret[:8] + '...' + secret[-8:],
+            'working': is_working,
+            'is_current': i == current_proxy_index
+        })
+    
     return jsonify({
         'connected': status,
-        'host': PROXY_HOST,
-        'port': PROXY_PORT,
-        'secret': PROXY_SECRET[:8] + '...' + PROXY_SECRET[-8:]
+        'host': current_proxy[0],
+        'port': current_proxy[1],
+        'secret': current_proxy[2][:8] + '...' + current_proxy[2][-8:],
+        'current_index': current_proxy_index,
+        'total_proxies': len(MTPROTO_PROXIES),
+        'all_proxies': all_proxies_status
     })
 
 
@@ -346,20 +440,70 @@ def modify_html_content(html_content):
         return html_content if isinstance(html_content, bytes) else html_content.encode('utf-8')
 
 
-if __name__ == '__main__':
+def run_desktop_app():
+    """Запуск desktop приложения с встроенным браузером"""
     # Создаём директорию для шаблонов
     os.makedirs('templates', exist_ok=True)
     os.makedirs('static', exist_ok=True)
     
     print("=" * 50)
-    print("Telegram Web Proxy Server")
+    print("Telegram Web Proxy Desktop Application")
     print("=" * 50)
-    print(f"MTProto Proxy: {PROXY_HOST}:{PROXY_PORT}")
-    print(f"Secret: {PROXY_SECRET}")
-    print(f"Telegram Web: {TELEGRAM_WEB_URL}")
-    print("=" * 50)
-    print("Starting server on http://0.0.0.0:5000")
+    print(f"MTProto Proxies ({len(MTPROTO_PROXIES)} available):")
+    for i, (host, port, secret) in enumerate(MTPROTO_PROXIES):
+        marker = " <-- CURRENT" if i == current_proxy_index else ""
+        print(f"  [{i+1}] {host}:{port} Secret: {secret[:8]}...{secret[-8:]}{marker}")
+    print(f"\nTelegram Web: {TELEGRAM_WEB_URL}")
     print("=" * 50)
     
-    # Отключаем reloader чтобы избежать проблем с subprocess
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True, use_reloader=False)
+    # Определяем порт для запуска
+    port = 5000
+    
+    # Запускаем Flask сервер в отдельном потоке
+    def run_server():
+        app.run(host='127.0.0.1', port=port, debug=False, threaded=True, use_reloader=False)
+    
+    server_thread = threading.Thread(target=run_server, daemon=True)
+    server_thread.start()
+    
+    # Даём серверу время запуститься
+    time.sleep(2)
+    
+    # Создаём окно приложения
+    url = f"http://127.0.0.1:{port}"
+    
+    # Настройки окна
+    width = 1400
+    height = 900
+    
+    # Создаём окно pywebview
+    webview.create_window(
+        title='Telegram Web Desktop',
+        url=url,
+        width=width,
+        height=height,
+        min_size=(800, 600),
+        resizable=True,
+        fullscreen=False,
+        text_select=True,
+    )
+    
+    # Запускаем приложение
+    print(f"Starting desktop application on http://127.0.0.1:{port}")
+    print("=" * 50)
+    print("Application window will open shortly...")
+    print("Press Ctrl+C in console to stop the server")
+    print("=" * 50)
+    
+    webview.start(debug=False)
+
+
+if __name__ == '__main__':
+    # Проверяем, запущены ли мы как frozen приложение или как скрипт
+    if getattr(sys, 'frozen', False):
+        # Запуск из exe файла
+        print("Running as standalone executable")
+        run_desktop_app()
+    else:
+        # Запуск как обычный Python скрипт
+        run_desktop_app()
