@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Web - MTProto Proxy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* Стили для iframe контейнера */
+        .telegram-frame-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #0e1621;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .telegram-frame-container.active {
+            display: block;
+        }
+        
+        .telegram-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #fff;
+        }
+        
+        .close-telegram-btn {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #fff;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 1001;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+        
+        .close-telegram-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: rotate(90deg);
+        }
+        
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(14, 22, 33, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1002;
+        }
+        
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(42, 171, 238, 0.2);
+            border-top-color: #2AABEE;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            margin-top: 20px;
+            color: #8899a6;
+            font-size: 16px;
+        }
+        
+        .start-telegram-btn {
+            padding: 16px 32px;
+            font-size: 18px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #2AABEE 0%, #1b8bc9 100%);
+            border: none;
+            border-radius: 12px;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 24px;
+            box-shadow: 0 4px 15px rgba(42, 171, 238, 0.3);
+        }
+        
+        .start-telegram-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(42, 171, 238, 0.4);
+        }
+        
+        .start-telegram-btn:active {
+            transform: translateY(-1px);
+        }
+        
+        .welcome-message h2 {
+            margin-top: 24px;
+            margin-bottom: 12px;
+            color: #fff;
+            font-size: 28px;
+        }
+        
+        .feature-list {
+            text-align: left;
+            max-width: 400px;
+            margin: 24px auto;
+            padding: 20px;
+            background: rgba(23, 33, 43, 0.8);
+            border-radius: 12px;
+        }
+        
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 12px 0;
+            color: #f5f5f5;
+        }
+        
+        .feature-icon {
+            width: 24px;
+            height: 24px;
+            background: #2AABEE;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Боковая панель -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <svg viewBox="0 0 24 24" width="32" height="32">
+                        <path fill="#2AABEE" d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+                    </svg>
+                    <span>Telegram Web</span>
+                </div>
+            </div>
+            
+            <div class="search-box">
+                <input type="text" placeholder="Поиск...">
+            </div>
+            
+            <div class="chat-list">
+                <div class="chat-item" onclick="startTelegram()">
+                    <div class="avatar" style="background: linear-gradient(135deg, #2AABEE 0%, #1b8bc9 100%);">
+                        <span>🌐</span>
+                    </div>
+                    <div class="chat-info">
+                        <div class="chat-name">Открыть Telegram Web</div>
+                        <div class="chat-message">Настоящий интерфейс Telegram</div>
+                    </div>
+                </div>
+                <div class="chat-item">
+                    <div class="avatar">
+                        <span>🔒</span>
+                    </div>
+                    <div class="chat-info">
+                        <div class="chat-name">MTProto Прокси</div>
+                        <div class="chat-message">Безопасное подключение</div>
+                    </div>
+                </div>
+                <div class="chat-item">
+                    <div class="avatar">
+                        <span>⚡</span>
+                    </div>
+                    <div class="chat-info">
+                        <div class="chat-name">Быстро и надёжно</div>
+                        <div class="chat-message">Прямое соединение</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Основная область -->
+        <main class="chat-area">
+            <div class="chat-header">
+                <div class="chat-header-info">
+                    <h3>Telegram Web через MTProto</h3>
+                </div>
+                <div class="proxy-status" id="proxyStatus">
+                    <span class="status-indicator"></span>
+                    <span class="status-text">Проверка прокси...</span>
+                </div>
+            </div>
+
+            <div class="messages-container" id="messagesContainer">
+                <div class="welcome-message">
+                    <svg viewBox="0 0 24 24" width="120" height="120">
+                        <path fill="#2AABEE" d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+                    </svg>
+                    <h2>Добро пожаловать в Telegram Web</h2>
+                    <p>Полноценный веб-интерфейс Telegram через MTProto прокси</p>
+                    
+                    <div class="feature-list">
+                        <div class="feature-item">
+                            <div class="feature-icon">✓</div>
+                            <span>Настоящий интерфейс Telegram</span>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">✓</div>
+                            <span>Все ваши чаты и контакты</span>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">✓</div>
+                            <span>Безопасное соединение</span>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">✓</div>
+                            <span>Работа через прокси</span>
+                        </div>
+                    </div>
+                    
+                    <div class="proxy-info">
+                        <strong>Прокси:</strong> {{ proxy_host }}:{{ proxy_port }}
+                    </div>
+                    
+                    <button class="start-telegram-btn" onclick="startTelegram()">
+                        🚀 Запустить Telegram Web
+                    </button>
+                </div>
+            </div>
+
+            <div class="message-input" style="opacity: 0.5; pointer-events: none;">
+                <button class="attach-btn">
+                    <svg viewBox="0 0 24 24" width="24" height="24">
+                        <path fill="currentColor" d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/>
+                    </svg>
+                </button>
+                <input type="text" placeholder="Запустите Telegram для начала работы..." class="message-field" disabled>
+                <button class="send-btn" disabled>
+                    <svg viewBox="0 0 24 24" width="24" height="24">
+                        <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                    </svg>
+                </button>
+            </div>
+        </main>
+
+        <!-- Правая панель с информацией -->
+        <aside class="info-panel">
+            <div class="info-header">
+                <h3>Информация</h3>
+            </div>
+            <div class="info-content">
+                <div class="info-section">
+                    <h4>Статус подключения</h4>
+                    <div class="connection-status" id="connectionStatus">
+                        <span class="status-dot"></span>
+                        <span>Ожидание...</span>
+                    </div>
+                </div>
+                
+                <div class="info-section">
+                    <h4>Прокси настройки</h4>
+                    <div class="proxy-details">
+                        <div class="proxy-row">
+                            <span>Хост:</span>
+                            <code>{{ proxy_host }}</code>
+                        </div>
+                        <div class="proxy-row">
+                            <span>Порт:</span>
+                            <code>{{ proxy_port }}</code>
+                        </div>
+                        <div class="proxy-row">
+                            <span>Секрет:</span>
+                            <code>{{ proxy_secret[:8] }}...{{ proxy_secret[-8:] }}</code>
+                        </div>
+                        <div class="proxy-row">
+                            <span>Тип:</span>
+                            <code>MTProto</code>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="info-section">
+                    <h4>Telegram Web</h4>
+                    <div class="proxy-details">
+                        <div class="proxy-row">
+                            <span>URL:</span>
+                            <code>web.telegram.org</code>
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="test-proxy-btn" onclick="testProxy()">
+                    Тестировать прокси
+                </button>
+                
+                <div style="margin-top: 16px; padding: 12px; background: rgba(42, 171, 238, 0.1); border-radius: 8px; font-size: 13px; color: #8899a6;">
+                    💡 Нажмите "Запустить Telegram Web" чтобы открыть полноценный интерфейс Telegram через прокси
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Контейнер для Telegram Web -->
+    <div class="telegram-frame-container" id="telegramFrameContainer">
+        <button class="close-telegram-btn" onclick="closeTelegram()" title="Закрыть">×</button>
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Загрузка Telegram...</div>
+        </div>
+        <iframe class="telegram-frame" id="telegramFrame" src=""></iframe>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        // Функции для открытия/закрытия Telegram
+        function startTelegram() {
+            const container = document.getElementById('telegramFrameContainer');
+            const frame = document.getElementById('telegramFrame');
+            const overlay = document.getElementById('loadingOverlay');
+            
+            // Устанавливаем URL для загрузки через наш прокси
+            frame.src = '/telegram/';
+            
+            // Показываем контейнер
+            container.classList.add('active');
+            overlay.style.display = 'flex';
+            
+            // Скрываем лоадер после загрузки
+            frame.onload = function() {
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                }, 1000);
+            };
+            
+            // Таймаут на случай если onload не сработает
+            setTimeout(() => {
+                overlay.style.display = 'none';
+            }, 5000);
+        }
+        
+        function closeTelegram() {
+            const container = document.getElementById('telegramFrameContainer');
+            const frame = document.getElementById('telegramFrame');
+            
+            container.classList.remove('active');
+            frame.src = '';
+        }
+        
+        // Обработка клавиши Escape для закрытия
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeTelegram();
+            }
+        });
+    </script>
+</body>
+</html>

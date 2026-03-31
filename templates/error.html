@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ошибка прокси</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .error-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0e1621 0%, #1b2838 100%);
+            color: #f5f5f5;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .error-icon {
+            width: 80px;
+            height: 80px;
+            background: rgba(244, 67, 54, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+        
+        .error-icon svg {
+            width: 48px;
+            height: 48px;
+            fill: #f44336;
+        }
+        
+        .error-title {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #fff;
+        }
+        
+        .error-message {
+            font-size: 16px;
+            color: #8899a6;
+            max-width: 600px;
+            margin-bottom: 32px;
+            line-height: 1.6;
+        }
+        
+        .error-details {
+            background: rgba(244, 67, 54, 0.1);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+            border-radius: 8px;
+            padding: 16px 24px;
+            margin-bottom: 32px;
+            text-align: left;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #ffcdd2;
+            max-width: 600px;
+            word-break: break-all;
+        }
+        
+        .back-btn {
+            padding: 14px 32px;
+            background: linear-gradient(135deg, #2AABEE 0%, #1b8bc9 100%);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .back-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(42, 171, 238, 0.4);
+        }
+        
+        .retry-btn {
+            padding: 14px 32px;
+            background: transparent;
+            border: 2px solid #2AABEE;
+            border-radius: 8px;
+            color: #2AABEE;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-left: 12px;
+        }
+        
+        .retry-btn:hover {
+            background: rgba(42, 171, 238, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-icon">
+            <svg viewBox="0 0 24 24">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+            </svg>
+        </div>
+        
+        <h1 class="error-title">Ошибка подключения</h1>
+        
+        <p class="error-message">
+            Не удалось подключиться к Telegram через MTProto прокси. 
+            Проверьте настройки прокси или попробуйте позже.
+        </p>
+        
+        <div class="error-details">
+            {{ error }}
+        </div>
+        
+        <div>
+            <a href="/" class="back-btn">← На главную</a>
+            <button class="retry-btn" onclick="location.reload()">⟳ Повторить</button>
+        </div>
+    </div>
+</body>
+</html>
